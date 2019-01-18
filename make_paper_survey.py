@@ -22,13 +22,15 @@ for excelfile in excelfiles:
     choices=inbook.sheet_by_name('choices')
     settings=inbook.sheet_by_name('settings')
     outdoc=Document()
-    language=settings.cell_value(1,4)
+    for col in range(settings.ncols):
+        if settings.cell_value(0,col)=="default_language":
+            language = settings.cell_value(1,col).lower()     
 
     #Make choices dictionary
     for col in range(choices.ncols):
         if choices.cell_value(0,col)=="list_name":
             listname_col=col
-        if choices.cell_value(0,col)=="label::"+language:
+        if choices.cell_value(0,col).lower()=="label::"+language:
             label_col=col
         if choices.cell_value(0,col)=="name":
             num_col=col
@@ -64,9 +66,9 @@ for excelfile in excelfiles:
     for col in range(survey.ncols):
         if survey.cell_value(0,col)=="type":
             type_col=col
-        if survey.cell_value(0,col)=="label::"+language:
+        if survey.cell_value(0,col).lower()=="label::"+language:
             label_col=col
-        if survey.cell_value(0,col)=="hint::"+language:
+        if survey.cell_value(0,col).lower()=="hint::"+language:
             hint_col=col
         if survey.cell_value(0,col)=="name":
             name_col=col
@@ -152,7 +154,7 @@ for excelfile in excelfiles:
             hintwrite.add_run(hint).italic=True
     
         #Choices
-        if qtype=="text" | qtype=="string":
+        if qtype=="text" or qtype=="string":
             columnwrite=outdoc.add_paragraph('................................................................................................................................................')
     
         if qtype=="integer" or qtype=="decimal":
