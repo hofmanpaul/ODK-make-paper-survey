@@ -24,13 +24,16 @@ for excelfile in excelfiles:
     outdoc=Document()
     for col in range(settings.ncols):
         if settings.cell_value(0,col)=="default_language":
-            language = settings.cell_value(1,col).lower()     
+            language = "::" + settings.cell_value(1,col).lower()
+        else:
+            language=""
+
 
     #Make choices dictionary
     for col in range(choices.ncols):
         if choices.cell_value(0,col)=="list_name":
             listname_col=col
-        if choices.cell_value(0,col).lower()=="label::"+language:
+        if choices.cell_value(0,col).lower()=="label"+language:
             label_col=col
         if choices.cell_value(0,col)=="name":
             num_col=col
@@ -66,13 +69,13 @@ for excelfile in excelfiles:
     for col in range(survey.ncols):
         if survey.cell_value(0,col)=="type":
             type_col=col
-        if survey.cell_value(0,col).lower()=="label::"+language:
+        if survey.cell_value(0,col).lower()=="label"+language:
             label_col=col
-        if survey.cell_value(0,col).lower()=="hint::"+language:
+        if survey.cell_value(0,col).lower()=="hint"+language:
             hint_col=col
         if survey.cell_value(0,col)=="name":
             name_col=col
-        if survey.cell_value(0,col)=="relevant":
+        if survey.cell_value(0,col)=="relevant" or survey.cell_value(0,col)=="relevance":
            relevant_col=col 
 
     #Find relevant rows
@@ -87,7 +90,6 @@ for excelfile in excelfiles:
     variablelist=[]
     questionnumber=1
     for row in variablerows:
-        print "Now writing row " + str(row+1)
         #assign names
         if ' ' in survey.cell_value(row,type_col).strip():
             totaltype=survey.cell_value(row,type_col)
