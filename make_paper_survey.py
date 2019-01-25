@@ -1,164 +1,145 @@
 #This script takes all ODK formatted excel files in the current directory and turns them into paper surveys
-#In no way is this supposed to lead to a perfect file. Extensive tweaking will be necessary, as the structure of ODK allows for completely different surveywriting.
-#Python 2 only because of xlrd (but might fix that)
+#In no way is this supposed to lead to a perfect file. Extensive tweaking will be necessary, as 
+# the structure of ODK allows for completely different surveywriting.
+#Python 3.6 and up
 
 from docx import Document
-from xlrd import open_workbook
+import pandas
 import re
 import os
+
+def replace_dollarrefs(text, type):
+    #Keep going until all ODK references are replaced with human-readeable references
+    while '$' in text:
+    #find the first relevant variable
+        match=re.search('\{', text)
+        first=match.start()+1
+        match=re.search('}', text)
+        last=match.end()-1
+        variable=text[first:last]
+        #Remove the curly braces, and add the question number
+        Found=False
+        i=0
+        while not Found:
+            if numbered_varlist[i][1]==variable:
+                text=text.replace('${' + variable + '}', '[Q' + str(numbered_varlist[i][0]) + ' ' + numbered_varlist[i][1]  + ']')
+                Found=True
+            i+=1
+        #Additional replaces for selected syntax in relevants
+        while 'selected' in text and type=='relevant':
+            match=re.search('selected\(.+?\)', text)
+            relevant_orig=text[match.start():match.end()]
+            relevant_new=relevant_orig
+            relevant_new=relevant_new.replace('selected(', '')
+            relevant_new=relevant_new.replace(',', '=')
+            relevant_new=relevant_new.replace("'", '')
+            relevant_new=relevant_new.replace(")", '')
+            text=text.replace(relevant_orig, relevant_new)
+    return text
 
 # Initialise Files
 listfiles=os.listdir(os.getcwd())
 excelfiles=[]
-for stuff in listfiles:
-    if stuff.endswith('.xls') or stuff.endswith('.xlsx') and ('~$') not in stuff:
-        excelfiles=excelfiles+[stuff]
-print "This file will work on:" 
+for filename in listfiles:
+    if filename.endswith('.xls') or filename.endswith('.xlsx') and ('~$') not in filename:
+        excelfiles.append(filename)
+print("This file will work on:") 
 for excelfile in excelfiles:
-    print excelfile
+    print(excelfile)
 for excelfile in excelfiles:
-    inbook= open_workbook(excelfile)
-    survey= inbook.sheet_by_name('survey')
-    choices=inbook.sheet_by_name('choices')
-    settings=inbook.sheet_by_name('settings')
+    survey= pandas.read_excel(excelfile, sheet_name='survey')
+    choices= pandas.read_excel(excelfile, sheet_name='choices')
+    settings= pandas.read_excel(excelfile, sheet_name='settings')
     outdoc=Document()
-    for col in range(settings.ncols):
-        if settings.cell_value(0,col)=="default_language":
-            language = "::" + settings.cell_value(1,col).lower()
-        else:
-            language=""
-
-
-    #Make choices dictionary
-    for col in range(choices.ncols):
-        if choices.cell_value(0,col)=="list_name":
-            listname_col=col
-        if choices.cell_value(0,col).lower()=="label"+language:
-            label_col=col
-        if choices.cell_value(0,col)=="name":
-            num_col=col
-
+    try:
+        language = "::" + settings.at[0,'default language'].strip().lower()
+        print(f"Language found: {language} ")
+    except Exception:
+        language = ""
+        print("No language found")
+    label_col = 'label' + language
+    hint_col = 'hint' + language
+    if 'relevant' in survey.columns:
+        relevant_col = 'relevant'
+    elif 'relevance' in survey.columns:
+        relevant_col = 'relevance'
+    else:
+        print('Relevance column not found')
+        
     choicesdict={}
     choicelist=[]
-    listname=choices.cell_value(1,listname_col).strip()
-    for row in range(1,choices.nrows):
-        if choices.cell_value(row,listname_col)=="":
+    listname=choices.at[0, 'list_name'].strip().lower()
+    for index, row in choices.iterrows():
+        if row['list_name']=="":
             continue
-        if listname==choices.cell_value(row,listname_col).strip():
-            label= choices.cell_value(row,label_col)
-            num= choices.cell_value(row,num_col)
-            strnum=str(num).rstrip('0').rstrip('.')
-            choicelist=choicelist + [strnum+'. '+ label]
-            if row==choices.nrows-1: #for the last row
-                choicesdict[listname]=choicelist
+        if listname==row['list_name'].strip().lower(): 
+            choicelist.append(str(row['name']) + '. ' + row['label'])
         else: #write the choicelist to the dictionary, then continue with the next choices
             choicesdict[listname]=choicelist
             choicelist=[]
-        
-            listname= choices.cell_value(row,listname_col).strip()
-            label= choices.cell_value(row,label_col)
-            num= choices.cell_value(row,num_col)
-            strnum=str(num).rstrip('0').rstrip('.')
-            choicelist=choicelist + [strnum+'. '+ label]
+            listname=row['list_name'].strip().lower()
+            choicelist.append(str(row['name']) + '. ' + row['label'])
+    choicesdict[listname]=choicelist #for the last choice list
+
 
     #Write Initial stuff
-    outdoc.add_heading(settings.cell_value(1,0))
-    outdoc.add_paragraph("This is an automatically generated paper survey based on an ODK excel file. Each question consists of four parts: 1. the variable name (bold). This also includes a question number (which is not used) and matches the name of the corresponding variable in the dataset. 2. A label. 3. a hint (italic). 4. The answer option(s). Before the hint there can be some conditions that dictate when this question is asked. The answer options are: ellipses (...) for text answers, white space between hyphens (-    -) for numbers, o if interviewees have to choose one and u if interviewees have to select multiple.")
+    outdoc.add_heading(settings.at[0, 'form_title'])
+    outdoc.add_paragraph("This is an automatically generated paper survey based on an ODK excel " 
+                         "file. Each question consists of four parts: 1. the variable name (bold). " 
+                         "This also includes a question number (which is not used) and matches the " 
+                         "name of the corresponding variable in the dataset. 2. A label. 3. a hint " 
+                         "(italic). 4. The answer option(s). Before the hint there can be some " 
+                         "conditions that dictate when this question is asked. The answer options " 
+                         "are: ellipses (...) for text answers, white space between hyphens (-    -) "
+                         "for numbers, o if interviewees have to choose one and u if interviewees " 
+                         "have to select multiple.")
 
-    #find relevant columns
-    for col in range(survey.ncols):
-        if survey.cell_value(0,col)=="type":
-            type_col=col
-        if survey.cell_value(0,col).lower()=="label"+language:
-            label_col=col
-        if survey.cell_value(0,col).lower()=="hint"+language:
-            hint_col=col
-        if survey.cell_value(0,col)=="name":
-            name_col=col
-        if survey.cell_value(0,col)=="relevant" or survey.cell_value(0,col)=="relevance":
-           relevant_col=col 
 
-    #Find relevant rows
-    variablerows=[]
-    for row in range(1, survey.nrows):
-        if survey.cell_value(row,type_col)=="begin group" or survey.cell_value(row,type_col)=="end group" or survey.cell_value(row,type_col)=="" or survey.cell_value(row,type_col)=="start" or survey.cell_value(row,type_col)=="end" or survey.cell_value(row,type_col)=="deviceid" or survey.cell_value(row,type_col)=="end repeat":
-            continue
-        else:
-            variablerows=variablerows+[row]
-    
+    skiplist = ['begin group', 'end group', 'start', 'end', 'deviceid','begin repeat', 'end repeat'
+                , 'note']
     # Make list of lists of the question properties and write
-    variablelist=[]
+    numbered_varlist=[]
     questionnumber=1
-    for row in variablerows:
-        #assign names
-        if ' ' in survey.cell_value(row,type_col).strip():
-            totaltype=survey.cell_value(row,type_col)
-            totaltype=totaltype.strip()
-            typelist=totaltype.split(' ')
+    for index, row in survey.iterrows():
+        if row['type'] in skiplist:
+            continue
+        
+        if ' ' in row['type'].strip():
+            typelist=row['type'].strip().split(' ')
             qtype=typelist[0]
             choices=typelist[1]
         else:
-            qtype=survey.cell_value(row,type_col)
+            qtype=row['type']
             choices=''
-        name=survey.cell_value(row,name_col)
-        label=survey.cell_value(row,label_col)
-        relevant=survey.cell_value(row,relevant_col)
-        hint=survey.cell_value(row,hint_col)
-        variablelist.append([questionnumber, qtype, choices, name, label, hint, relevant])
         #Write!
         #Name
         namewrite=outdoc.add_paragraph()
-        namewrite.add_run(str(questionnumber)+ ' ' + name).bold=True
+        namewrite.add_run(str(questionnumber)+ ' ' + row['name']).bold=True
+        numbered_varlist.append([questionnumber, row['name']])
         
-        #Label
-        labelwrite=outdoc.add_paragraph()
-        labelwrite.add_run(label)
-    
         #Relevant
-        if not relevant=="":
-            #Keep going until all ODK references are replaced with human-readeable references
-            while '$' in relevant:
-                #find the first relevant variable
-                match=re.search('\{', relevant)
-                first=match.start()+1
-                match=re.search('}', relevant)
-                last=match.end()-1
-                variable=relevant[first:last]
-                #Remove the curly braces, and add the question number
-                Found=False
-                i=0
-                while not Found:
-                    if variablelist[i][3]==variable:
-                        relevant=relevant.replace('${' + variable + '}', 'Q' + str(variablelist[i][0]) + ' ' + variablelist[i][3])
-                        Found=True
-                    i+=1
-                #Fix relevant syntax
-                while 'selected' in relevant:
-                    print relevant
-                    match=re.search('selected\(.+?\)', relevant)
-                    relevant_orig=relevant[match.start():match.end()]
-                    relevant_new=relevant_orig
-                    relevant_new=relevant_new.replace('selected(', '')
-                    relevant_new=relevant_new.replace(',', '=')
-                    relevant_new=relevant_new.replace("'", '')
-                    relevant_new=relevant_new.replace(")", '')
-                    relevant=relevant.replace(relevant_orig, relevant_new)
-                    print relevant
-                    
-                    
-                
+        if pandas.notnull(row[relevant_col]):
+            relevant = replace_dollarrefs(row[relevant_col], 'relevant')
             relevantwrite='Only ask if ' + relevant
-            relevantwrite=outdoc.add_paragraph(relevantwrite)            
+            relevantwrite=outdoc.add_paragraph(relevantwrite)      
+            
+        #Label
+        if pandas.notnull(row[label_col]):
+            label = replace_dollarrefs(row[label_col], 'label')
+            labelwrite=outdoc.add_paragraph()
+            labelwrite.add_run(label)
     
         #Hint
-        if not hint=='':
+        if pandas.notnull(row[hint_col]):
+            hint = replace_dollarrefs(row[hint_col], 'hint')
             hintwrite=outdoc.add_paragraph()
             hintwrite.add_run(hint).italic=True
     
         #Choices
         if qtype=="text" or qtype=="string":
-            columnwrite=outdoc.add_paragraph('................................................................................................................................................')
-    
+            columnwrite=outdoc.add_paragraph("...................................................."
+                                             "...................................................."
+                                             ".........................................")
         if qtype=="integer" or qtype=="decimal":
             columnwrite=outdoc.add_paragraph('-             -')
         if qtype=='select_one' or qtype=='select_multiple':
@@ -166,18 +147,11 @@ for excelfile in excelfiles:
                 bullet='o'
             elif qtype=='select_multiple':
                 bullet="u"
-            if choices=='ID':
-                optionwrite=outdoc.add_paragraph('A select multiple of ID 1-200')
             else:
                 for option in choicesdict[choices]:
                     optionwrite=outdoc.add_paragraph(bullet + ' ' + option)
-    
-    
-    
+
         questionnumber+=1
 
-    
-
     outdoc.save(excelfile+'.docx')
-    
-print 'Finished'
+print('Finished')
