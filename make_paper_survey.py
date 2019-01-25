@@ -74,12 +74,12 @@ for excelfile in excelfiles:
             continue
         if listname==row['list_name'].strip().lower(): 
             choicelist.append(str(row['name']) + '. ' + row['label'])
-        else: #write the choicelist to the dictionary, then continue with the next choices
+        else: 
             choicesdict[listname]=choicelist
             choicelist=[]
             listname=row['list_name'].strip().lower()
             choicelist.append(str(row['name']) + '. ' + row['label'])
-    choicesdict[listname]=choicelist #for the last choice list
+    choicesdict[listname]=choicelist
 
 
     #Write Initial stuff
@@ -101,7 +101,7 @@ for excelfile in excelfiles:
     numbered_varlist=[]
     questionnumber=1
     for index, row in survey.iterrows():
-        if row['type'] in skiplist:
+        if row['type'] in skiplist or pandas.notnull(row['type']):
             continue
         
         if ' ' in row['type'].strip():
@@ -111,30 +111,25 @@ for excelfile in excelfiles:
         else:
             qtype=row['type']
             choices=''
-        #Write!
         #Name
         namewrite=outdoc.add_paragraph()
         namewrite.add_run(str(questionnumber)+ ' ' + row['name']).bold=True
         numbered_varlist.append([questionnumber, row['name']])
-        
         #Relevant
         if pandas.notnull(row[relevant_col]):
             relevant = replace_dollarrefs(row[relevant_col], 'relevant')
             relevantwrite='Only ask if ' + relevant
-            relevantwrite=outdoc.add_paragraph(relevantwrite)      
-            
+            relevantwrite=outdoc.add_paragraph(relevantwrite)         
         #Label
         if pandas.notnull(row[label_col]):
             label = replace_dollarrefs(row[label_col], 'label')
             labelwrite=outdoc.add_paragraph()
             labelwrite.add_run(label)
-    
         #Hint
         if pandas.notnull(row[hint_col]):
             hint = replace_dollarrefs(row[hint_col], 'hint')
             hintwrite=outdoc.add_paragraph()
             hintwrite.add_run(hint).italic=True
-    
         #Choices
         if qtype=="text" or qtype=="string":
             columnwrite=outdoc.add_paragraph("...................................................."
@@ -147,9 +142,8 @@ for excelfile in excelfiles:
                 bullet='o'
             elif qtype=='select_multiple':
                 bullet="u"
-            else:
-                for option in choicesdict[choices]:
-                    optionwrite=outdoc.add_paragraph(bullet + ' ' + option)
+            for option in choicesdict[choices]:
+                optionwrite=outdoc.add_paragraph(bullet + ' ' + option)
 
         questionnumber+=1
 
