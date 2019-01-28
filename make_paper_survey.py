@@ -8,7 +8,7 @@ import pandas
 import re
 import os
 
-def replace_dollarrefs(text, type):
+def replace_dollarrefs(text):
     #Keep going until all ODK references are replaced with human-readeable references
     while '$' in text:
     #find the first relevant variable
@@ -25,16 +25,19 @@ def replace_dollarrefs(text, type):
                 text=text.replace('${' + variable + '}', '[Q' + str(numbered_varlist[i][0]) + ' ' + numbered_varlist[i][1]  + ']')
                 Found=True
             i+=1
-        #Additional replaces for selected syntax in relevants
-        while 'selected' in text and type=='relevant':
-            match=re.search('selected\(.+?\)', text)
-            relevant_orig=text[match.start():match.end()]
-            relevant_new=relevant_orig
-            relevant_new=relevant_new.replace('selected(', '')
-            relevant_new=relevant_new.replace(',', '=')
-            relevant_new=relevant_new.replace("'", '')
-            relevant_new=relevant_new.replace(")", '')
-            text=text.replace(relevant_orig, relevant_new)
+    return text
+
+def fix_selectedsyntax(text):
+    #Additional replaces for selected syntax in relevants
+    while 'selected' in text:
+        match=re.search('selected\(.+?\)', text)
+        relevant_orig=text[match.start():match.end()]
+        relevant_new=relevant_orig
+        relevant_new=relevant_new.replace('selected(', '')
+        relevant_new=relevant_new.replace(',', '=')
+        relevant_new=relevant_new.replace("'", '')
+        relevant_new=relevant_new.replace(")", '')
+        text=text.replace(relevant_orig, relevant_new)
     return text
 
 # Initialise Files
@@ -81,7 +84,6 @@ for excelfile in excelfiles:
             choicelist.append(str(row['name']) + '. ' + row['label'])
     choicesdict[listname]=choicelist
 
-
     #Write Initial stuff
     outdoc.add_heading(settings.at[0, 'form_title'])
     outdoc.add_paragraph("This is an automatically generated paper survey based on an ODK excel " 
@@ -101,7 +103,7 @@ for excelfile in excelfiles:
     numbered_varlist=[]
     questionnumber=1
     for index, row in survey.iterrows():
-        if row['type'] in skiplist or pandas.notnull(row['type']):
+        if row['type'] in skiplist or not pandas.notnull(row['type']):
             continue
         
         if ' ' in row['type'].strip():
@@ -117,17 +119,18 @@ for excelfile in excelfiles:
         numbered_varlist.append([questionnumber, row['name']])
         #Relevant
         if pandas.notnull(row[relevant_col]):
-            relevant = replace_dollarrefs(row[relevant_col], 'relevant')
+            relevant = replace_dollarrefs(row[relevant_col])
+            relevant = fix_selectedsyntax(relevant)
             relevantwrite='Only ask if ' + relevant
             relevantwrite=outdoc.add_paragraph(relevantwrite)         
         #Label
         if pandas.notnull(row[label_col]):
-            label = replace_dollarrefs(row[label_col], 'label')
+            label = replace_dollarrefs(row[label_col])
             labelwrite=outdoc.add_paragraph()
             labelwrite.add_run(label)
         #Hint
         if pandas.notnull(row[hint_col]):
-            hint = replace_dollarrefs(row[hint_col], 'hint')
+            hint = replace_dollarrefs(row[hint_col])
             hintwrite=outdoc.add_paragraph()
             hintwrite.add_run(hint).italic=True
         #Choices
